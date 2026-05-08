@@ -10,8 +10,6 @@ interface PriceData {
   source: string;
 }
 
-const IS_SERVERLESS = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
-
 function getDataFilePath(): string {
   const base = typeof import.meta.dirname === "string"
     ? import.meta.dirname
@@ -22,7 +20,6 @@ function getDataFilePath(): string {
 let cachedData: PriceData | null = null;
 
 function loadFromFile(): PriceData | null {
-  if (IS_SERVERLESS) return null;
   try {
     const filePath = getDataFilePath();
     if (fs.existsSync(filePath)) {
@@ -33,13 +30,12 @@ function loadFromFile(): PriceData | null {
       }
     }
   } catch {
-    // File not available — expected on serverless or first run
+    // File not available
   }
   return null;
 }
 
 function saveToFile(data: PriceData): void {
-  if (IS_SERVERLESS) return;
   try {
     const filePath = getDataFilePath();
     const dir = path.dirname(filePath);
@@ -49,7 +45,7 @@ function saveToFile(data: PriceData): void {
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
     console.log(`[PriceStore] Saved ${data.prices.length} cities to file`);
   } catch {
-    // Write failed — expected on read-only filesystems
+    // Write failed
   }
 }
 
@@ -132,7 +128,6 @@ export async function updatePrices(): Promise<{
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
-    console.error("[PriceStore] Update failed:", msg);
     return {
       success: false,
       message: `更新失败: ${msg}`,
