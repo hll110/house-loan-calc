@@ -30,13 +30,10 @@ import {
   calculateEqualPrincipal,
   calculatePrepayment,
   compareMethods,
-  cityPrices,
-  searchCities,
-  getCitiesByTier,
   formatMonths,
-  lastPriceUpdate,
 } from "@/lib/loan";
-import type { LoanResult, ComparisonResult, PrepayResult } from "@/lib/loan";
+import type { LoanResult, ComparisonResult, PrepayResult, CityPrice } from "@/lib/loan";
+import { trpc } from "@/providers/trpc";
 
 // ========== 房贷计算器 ==========
 function LoanCalculator({
@@ -789,26 +786,68 @@ function PriceSection() {
   const [keyword, setKeyword] = useState("");
   const [tier, setTier] = useState<number | null>(null);
 
+  const allCitiesQuery = trpc.housingPrice.list.useQuery(undefined, {
+    staleTime: 5 * 60 * 1000,
+  });
+  const updateInfoQuery = trpc.housingPrice.updateInfo.useQuery(undefined, {
+    staleTime: 60 * 1000,
+  });
+
+  const allCities: CityPrice[] = allCitiesQuery.data ?? [];
+
   const cities = useMemo(() => {
-    if (keyword.length > 0) return searchCities(keyword);
-    if (tier !== null) return getCitiesByTier(tier);
-    return cityPrices;
-  }, [keyword, tier]);
+    if (keyword.length > 0) {
+      const lower = keyword.toLowerCase();
+      return allCities.filter(
+        (c) =>
+          c.cityName.includes(keyword) ||
+          c.province.includes(keyword) ||
+          c.cityName.toLowerCase().includes(lower) ||
+          c.province.toLowerCase().includes(lower)
+      );
+    }
+    if (tier !== null) return allCities.filter((c) => c.tier === tier);
+    return allCities;
+  }, [keyword, tier, allCities]);
+
+  const formatUpdateTime = (iso: string) => {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleString("zh-CN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return iso;
+    }
+  };
 
   return (
     <div className="space-y-4">
       <Card className="bg-blue-50 border-blue-200">
         <CardContent className="p-3 flex items-center gap-3">
-          <RefreshCw className="h-5 w-5 text-blue-600 shrink-0" />
-          <div className="text-sm">
+          <RefreshCw className={`h-5 w-5 text-blue-600 shrink-0 ${allCitiesQuery.isLoading ? "animate-spin" : ""}`} />
+          <div className="text-sm flex-1">
             <div className="text-blue-900 font-medium">
               房价数据每天0点自动更新最新数据
             </div>
             <div className="text-blue-700 flex items-center gap-1.5 mt-0.5">
               <Clock className="h-3.5 w-3.5" />
-              数据更新时间：{lastPriceUpdate}
+              {updateInfoQuery.data ? (
+                <>数据更新时间：{formatUpdateTime(updateInfoQuery.data.updatedAt)}</>
+              ) : (
+                <>加载中...</>
+              )}
             </div>
           </div>
+          {updateInfoQuery.data?.source && updateInfoQuery.data.source !== "built-in" && (
+            <Badge variant="outline" className="text-xs bg-white">
+              来源：{updateInfoQuery.data.source}
+            </Badge>
+          )}
         </CardContent>
       </Card>
 
@@ -874,12 +913,18 @@ function PriceSection() {
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <MapPin className="h-4 w-4" />
         <span>共 {cities.length} 个城市</span>
-        <Badge variant="outline" className="text-xs">
-          2026年4月百城房价
-        </Badge>
+        {updateInfoQuery.data && (
+          <Badge variant="outline" className="text-xs">
+            {updateInfoQuery.data.cityCount} 城市数据
+          </Badge>
+        )}
       </div>
 
-      <CityPriceGrid cities={cities} />
+      {allCitiesQuery.isLoading ? (
+        <div className="text-center py-8 text-muted-foreground">加载房价数据中...</div>
+      ) : (
+        <CityPriceGrid cities={cities} />
+      )}
     </div>
   );
 }

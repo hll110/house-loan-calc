@@ -6,11 +6,9 @@ import {
   calculateComboLoan,
   calculatePrepayment,
   compareMethods,
-  cityPrices,
-  searchCities,
-  getCitiesByTier,
   type CityPrice,
 } from "../contracts/loan";
+import * as priceStore from "./services/price-store";
 
 export const appRouter = createRouter({
   // 健康检查
@@ -18,15 +16,21 @@ export const appRouter = createRouter({
 
   // ========== 城市房价相关 ==========
   housingPrice: createRouter({
-    list: publicQuery.query((): CityPrice[] => cityPrices),
+    list: publicQuery.query((): CityPrice[] => priceStore.getCities()),
 
     byTier: publicQuery
       .input(z.object({ tier: z.number().min(1).max(3) }))
-      .query(({ input }): CityPrice[] => getCitiesByTier(input.tier)),
+      .query(({ input }): CityPrice[] => priceStore.getCitiesByTier(input.tier)),
 
     search: publicQuery
       .input(z.object({ keyword: z.string() }))
-      .query(({ input }): CityPrice[] => searchCities(input.keyword)),
+      .query(({ input }): CityPrice[] => priceStore.searchCities(input.keyword)),
+
+    updateInfo: publicQuery.query(() => priceStore.getUpdateInfo()),
+
+    refresh: publicQuery.mutation(async () => {
+      return priceStore.updatePrices();
+    }),
   }),
 
   // ========== 房贷计算相关 ==========
