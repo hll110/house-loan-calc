@@ -10,38 +10,46 @@ interface PriceData {
   source: string;
 }
 
-const DATA_FILE = path.resolve(
-  import.meta.dirname,
-  "../../data/city-prices.json"
-);
+const IS_SERVERLESS = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+
+function getDataFilePath(): string {
+  const base = typeof import.meta.dirname === "string"
+    ? import.meta.dirname
+    : process.cwd();
+  return path.resolve(base, "../../data/city-prices.json");
+}
 
 let cachedData: PriceData | null = null;
 
 function loadFromFile(): PriceData | null {
+  if (IS_SERVERLESS) return null;
   try {
-    if (fs.existsSync(DATA_FILE)) {
-      const raw = fs.readFileSync(DATA_FILE, "utf-8");
+    const filePath = getDataFilePath();
+    if (fs.existsSync(filePath)) {
+      const raw = fs.readFileSync(filePath, "utf-8");
       const data = JSON.parse(raw) as PriceData;
       if (data.prices && data.prices.length > 0) {
         return data;
       }
     }
-  } catch (err) {
-    console.warn("[PriceStore] Failed to load data file:", err);
+  } catch {
+    // File not available — expected on serverless or first run
   }
   return null;
 }
 
 function saveToFile(data: PriceData): void {
+  if (IS_SERVERLESS) return;
   try {
-    const dir = path.dirname(DATA_FILE);
+    const filePath = getDataFilePath();
+    const dir = path.dirname(filePath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), "utf-8");
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
     console.log(`[PriceStore] Saved ${data.prices.length} cities to file`);
-  } catch (err) {
-    console.warn("[PriceStore] Failed to save data file:", err);
+  } catch {
+    // Write failed — expected on read-only filesystems
   }
 }
 

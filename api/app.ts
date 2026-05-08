@@ -8,6 +8,11 @@ import cronApp from "./cron/update-prices";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
+app.onError((err, c) => {
+  console.error("[App] Unhandled error:", err.message, err.stack);
+  return c.json({ error: err.message }, 500);
+});
+
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
 
 app.route("/", cronApp);
